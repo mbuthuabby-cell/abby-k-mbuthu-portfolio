@@ -1,57 +1,75 @@
-/* Abby Mbuthu portfolio: liquid hero, flowing section edges and scroll reveals */
+/* Abby Mbuthu portfolio v2: preloader, menu, liquid hero, counters and scroll effects */
 (() => {
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const finePointer = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
   const lerp = (a, b, t) => a + (b - a) * t;
   const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 
+  const body = document.body;
   const hero = document.querySelector('.hero');
   const header = document.querySelector('.site-header');
 
-  /* ---------- Split the headline into letters ---------- */
+  /* ---------- Split the hero headline into letters (keeps italic words) ---------- */
   const title = document.querySelector('[data-liquid]');
   const letters = [];
   if (title) {
-    const text = title.textContent.trim();
-    const words = text.split(/\s+/);
-    title.setAttribute('aria-label', text);
-    title.textContent = '';
+    title.setAttribute('aria-label', title.textContent.replace(/\s+/g, ' ').trim());
     let i = 0;
-    words.forEach((word, wi) => {
-      const w = document.createElement('span');
-      w.className = 'w';
-      w.setAttribute('aria-hidden', 'true');
-      [...word].forEach((ch) => {
-        const s = document.createElement('span');
-        s.className = 'ch';
-        s.textContent = ch;
-        s.style.setProperty('--i', i++);
-        w.appendChild(s);
-        letters.push({ el: s, weight: 300, y: 0 });
+    const build = (text, wrapTag) => {
+      const frag = document.createDocumentFragment();
+      text.split(/(\s+)/).forEach((part) => {
+        if (!part) return;
+        if (/^\s+$/.test(part)) { frag.appendChild(document.createTextNode(' ')); return; }
+        const w = document.createElement('span');
+        w.className = 'w';
+        const holder = wrapTag ? document.createElement(wrapTag) : w;
+        [...part].forEach((ch) => {
+          const s = document.createElement('span');
+          s.className = 'ch';
+          s.textContent = ch;
+          s.style.setProperty('--i', i++);
+          holder.appendChild(s);
+          letters.push({ el: s, weight: 300, y: 0, serif: !!wrapTag });
+        });
+        if (wrapTag) w.appendChild(holder);
+        frag.appendChild(w);
       });
-      title.appendChild(w);
-      if (wi < words.length - 1) title.appendChild(document.createTextNode(' '));
+      return frag;
+    };
+    const nodes = [...title.childNodes];
+    title.textContent = '';
+    const inner = document.createElement('span');
+    inner.setAttribute('aria-hidden', 'true');
+    nodes.forEach((n) => {
+      if (n.nodeType === 3) inner.appendChild(build(n.textContent, null));
+      else if (n.nodeType === 1) inner.appendChild(build(n.textContent, n.tagName.toLowerCase()));
     });
+    title.appendChild(inner);
   }
 
-  /* ---------- Split case study titles into rising words ---------- */
+  /* ---------- Split section titles into rising words ---------- */
   document.querySelectorAll('[data-rise]').forEach((el) => {
-    const words = el.textContent.trim().split(/\s+/);
-    el.setAttribute('aria-label', el.textContent.trim());
+    el.setAttribute('aria-label', el.textContent.replace(/\s+/g, ' ').trim());
+    const nodes = [...el.childNodes];
     el.textContent = '';
-    words.forEach((word, i) => {
-      const outer = document.createElement('span');
-      outer.className = 'rw';
-      outer.setAttribute('aria-hidden', 'true');
-      const inner = document.createElement('span');
-      inner.textContent = word;
-      inner.style.setProperty('--i', i);
-      outer.appendChild(inner);
-      el.appendChild(outer);
-      if (i < words.length - 1) el.appendChild(document.createTextNode(' '));
+    let i = 0;
+    nodes.forEach((n) => {
+      const isEm = n.nodeType === 1;
+      n.textContent.split(/\s+/).filter(Boolean).forEach((word) => {
+        if (el.childNodes.length) el.appendChild(document.createTextNode(' '));
+        const outer = document.createElement('span');
+        outer.className = 'rw';
+        outer.setAttribute('aria-hidden', 'true');
+        const inner = document.createElement(isEm ? 'em' : 'span');
+        inner.textContent = word;
+        inner.style.setProperty('--i', i++);
+        outer.appendChild(inner);
+        el.appendChild(outer);
+      });
     });
   });
 
-  /* ---------- Liquid fill on buttons: starts where the pointer enters ---------- */
+  /* ---------- Liquid fill on buttons ---------- */
   document.querySelectorAll('.btn').forEach((btn) => {
     const place = (e) => {
       const r = btn.getBoundingClientRect();
@@ -62,42 +80,97 @@
     btn.addEventListener('pointerleave', place);
   });
 
-  /* ---------- Reduced motion: show everything and stop here ---------- */
+  /* ---------- Full screen menu ---------- */
+  const menu = document.getElementById('menu');
+  const toggle = document.querySelector('.menu-toggle');
+  const setMenu = (open) => {
+    body.classList.toggle('menu-open', open);
+    body.classList.toggle('is-locked', open);
+    menu.classList.toggle('is-open', open);
+    menu.setAttribute('aria-hidden', String(!open));
+    open ? menu.removeAttribute('inert') : menu.setAttribute('inert', '');
+    toggle.setAttribute('aria-expanded', String(open));
+    toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    if (open) setTimeout(() => menu.querySelector('a').focus({ preventScroll: true }), 300);
+  };
+  toggle.addEventListener('click', () => setMenu(!menu.classList.contains('is-open')));
+  menu.querySelectorAll('a').forEach((a) => a.addEventListener('click', () => setMenu(false)));
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && menu.classList.contains('is-open')) { setMenu(false); toggle.focus(); }
+  });
+
+  /* ---------- Counters ---------- */
+  const runCounter = (el) => {
+    const end = parseFloat(el.dataset.count);
+    if (reduceMotion) { el.textContent = end; return; }
+    const start = performance.now();
+    const dur = 1600;
+    const step = (now) => {
+      const t = clamp((now - start) / dur, 0, 1);
+      el.textContent = Math.round(end * (1 - Math.pow(1 - t, 4)));
+      if (t < 1) requestAnimationFrame(step);
+    };
+    el.textContent = '0';
+    requestAnimationFrame(step);
+  };
+
+  /* ---------- Reduced motion: show everything, keep it still ---------- */
   if (reduceMotion) {
     document.querySelectorAll('[data-reveal],[data-rise],[data-media]').forEach((el) => el.classList.add('is-in'));
-    hero && hero.classList.add('is-ready');
-    document.querySelectorAll('.media video').forEach((v) => v.setAttribute('controls', ''));
+    hero.classList.add('is-ready');
+    document.querySelector('.loader').remove();
+    document.querySelectorAll('video').forEach((v) => v.setAttribute('controls', ''));
     window.addEventListener('scroll', () => header.classList.toggle('is-scrolled', window.scrollY > 40), { passive: true });
     return;
   }
 
-  /* ---------- Hero: ink settles on load ---------- */
+  /* ---------- Preloader ---------- */
+  const loader = document.querySelector('.loader');
+  const num = document.getElementById('loader-num');
+  let loaded = document.readyState === 'complete';
+  window.addEventListener('load', () => { loaded = true; });
+  body.classList.add('is-locked');
+  let shown = 0;
+  const loadStart = performance.now();
+  const tickLoader = (now) => {
+    const elapsed = now - loadStart;
+    const cap = loaded || elapsed > 4000 ? 100 : 88;
+    const target = Math.min(cap, (elapsed / 1300) * 100);
+    shown = Math.max(shown, Math.floor(target));
+    num.textContent = shown;
+    if (shown < 100) { requestAnimationFrame(tickLoader); return; }
+    setTimeout(() => {
+      loader.classList.add('is-done');
+      body.classList.remove('is-locked');
+      startHero();
+      setTimeout(() => loader.remove(), 1200);
+    }, 200);
+  };
+  requestAnimationFrame(tickLoader);
+
+  /* ---------- Hero: ink settles, then comes alive ---------- */
   const settleDisp = document.getElementById('settle-disp');
   const artBase = document.getElementById('art-base');
-  requestAnimationFrame(() => {
+  function startHero() {
     hero.classList.add('is-ready');
     artBase.setAttribute('filter', 'url(#settle-filter)');
     const start = performance.now();
-    const dur = 2000;
     const step = (now) => {
-      const t = clamp((now - start) / dur, 0, 1);
-      const eased = 1 - Math.pow(1 - t, 3);
-      settleDisp.setAttribute('scale', (70 * (1 - eased)).toFixed(2));
+      const t = clamp((now - start) / 2000, 0, 1);
+      settleDisp.setAttribute('scale', (70 * Math.pow(1 - t, 3)).toFixed(2));
       if (t < 1) requestAnimationFrame(step);
       else artBase.removeAttribute('filter');
     };
     requestAnimationFrame(step);
-    setTimeout(() => hero.classList.add('is-live'), 2400);
-  });
+    setTimeout(() => hero.classList.add('is-live'), 2000);
+  }
 
-  /* ---------- Hero: liquid lens, parallax and flowing type ---------- */
   const wrap = document.querySelector('.hero-art-wrap');
   const lensSvg = document.querySelector('.hero-lens');
   const lensCircle = document.getElementById('lens-circle');
   const lensFilter = document.getElementById('lens-filter');
   const lensNoise = document.getElementById('lens-noise');
   const lensDisp = document.getElementById('lens-disp');
-
   const pointer = { x: 0, y: 0, nx: 0, ny: 0, inside: false };
   const lens = { x: 368, y: 520, r: 0, scale: 0, pulse: 0 };
   const par = { x: 0, y: 0 };
@@ -106,28 +179,22 @@
   const toSvg = (cx, cy) => {
     const ctm = lensSvg.getScreenCTM();
     if (!ctm) return { x: 0, y: 0 };
-    const pt = new DOMPoint(cx, cy).matrixTransform(ctm.inverse());
-    return { x: pt.x, y: pt.y };
+    const p = new DOMPoint(cx, cy).matrixTransform(ctm.inverse());
+    return { x: p.x, y: p.y };
   };
 
   const heroFrame = (now) => {
     const active = pointer.inside;
-
-    // Parallax drift of the line art
-    const tx = active ? pointer.nx * -22 : 0;
-    const ty = active ? pointer.ny * -14 : 0;
-    par.x = lerp(par.x, tx, 0.06);
-    par.y = lerp(par.y, ty, 0.06);
+    par.x = lerp(par.x, active ? pointer.nx * -22 : 0, 0.06);
+    par.y = lerp(par.y, active ? pointer.ny * -14 : 0, 0.06);
     wrap.style.transform = `translate3d(${par.x.toFixed(2)}px, ${par.y.toFixed(2)}px, 0)`;
 
-    // Lens follows the pointer and ripples
-    const target = active ? toSvg(pointer.x, pointer.y) : { x: lens.x, y: lens.y };
+    const target = active ? toSvg(pointer.x, pointer.y) : lens;
     lens.x = lerp(lens.x, target.x, 0.12);
     lens.y = lerp(lens.y, target.y, 0.12);
     lens.pulse *= 0.93;
     lens.r = lerp(lens.r, active ? 150 + lens.pulse * 90 : 0, 0.08);
     lens.scale = lerp(lens.scale, active ? 22 + lens.pulse * 40 : 0, 0.08);
-
     const pad = lens.r + 40;
     lensFilter.setAttribute('x', (lens.x - pad).toFixed(1));
     lensFilter.setAttribute('y', (lens.y - pad).toFixed(1));
@@ -136,12 +203,9 @@
     lensCircle.setAttribute('cx', lens.x.toFixed(1));
     lensCircle.setAttribute('cy', lens.y.toFixed(1));
     lensCircle.setAttribute('r', Math.max(0, lens.r).toFixed(1));
-    const f = 0.016 + Math.sin(now * 0.0011) * 0.004;
-    const g = 0.022 + Math.cos(now * 0.0009) * 0.005;
-    lensNoise.setAttribute('baseFrequency', `${f.toFixed(4)} ${g.toFixed(4)}`);
+    lensNoise.setAttribute('baseFrequency', `${(0.016 + Math.sin(now * 0.0011) * 0.004).toFixed(4)} ${(0.022 + Math.cos(now * 0.0009) * 0.005).toFixed(4)}`);
     lensDisp.setAttribute('scale', lens.scale.toFixed(2));
 
-    // Letters swell towards the pointer like a drop of ink
     let moving = false;
     if (letters.length && hero.classList.contains('is-live')) {
       const rects = letters.map((l) => l.el.getBoundingClientRect());
@@ -151,22 +215,21 @@
         if (active) {
           const dx = pointer.x - (r.left + r.width / 2);
           const dy = pointer.y - (r.top + r.height / 2);
-          fall = Math.exp(-(dx * dx + dy * dy) / (2 * 110 * 110));
+          fall = Math.exp(-(dx * dx + dy * dy) / (2 * 120 * 120));
         }
         const tw = 300 + 420 * fall;
-        const tyL = -0.09 * fall;
+        const ty = -0.08 * fall;
         l.weight = lerp(l.weight, tw, 0.14);
-        l.y = lerp(l.y, tyL, 0.14);
-        if (Math.abs(l.weight - tw) > 0.5) moving = true;
+        l.y = lerp(l.y, ty, 0.14);
+        if (Math.abs(l.weight - tw) > 0.5 || Math.abs(l.y - ty) > 0.001) moving = true;
       });
       letters.forEach((l) => {
-        l.el.style.fontWeight = Math.round(l.weight);
+        if (!l.serif) l.el.style.fontWeight = Math.round(l.weight);
         l.el.style.transform = `translateY(${l.y.toFixed(3)}em)`;
       });
     }
 
-    const settled = !active && lens.r < 0.5 && Math.abs(par.x) < 0.1 && Math.abs(par.y) < 0.1 && !moving;
-    if (settled) {
+    if (!active && lens.r < 0.5 && Math.abs(par.x) < 0.1 && Math.abs(par.y) < 0.1 && !moving) {
       lensCircle.setAttribute('r', '0');
       heroRaf = null;
       return;
@@ -174,84 +237,91 @@
     heroRaf = requestAnimationFrame(heroFrame);
   };
   const wakeHero = () => { if (!heroRaf) heroRaf = requestAnimationFrame(heroFrame); };
-
   hero.addEventListener('pointermove', (e) => {
     const r = hero.getBoundingClientRect();
-    pointer.x = e.clientX;
-    pointer.y = e.clientY;
+    pointer.x = e.clientX; pointer.y = e.clientY;
     pointer.nx = (e.clientX - r.left) / r.width - 0.5;
     pointer.ny = (e.clientY - r.top) / r.height - 0.5;
-    if (!pointer.inside) {
-      pointer.inside = true;
-      const p = toSvg(e.clientX, e.clientY);
-      lens.x = p.x; lens.y = p.y;
-    }
+    if (!pointer.inside) { pointer.inside = true; const p = toSvg(e.clientX, e.clientY); lens.x = p.x; lens.y = p.y; }
     wakeHero();
   });
   hero.addEventListener('pointerleave', () => { pointer.inside = false; wakeHero(); });
   hero.addEventListener('pointerdown', () => { lens.pulse = 1; wakeHero(); });
 
-  /* ---------- Flowing section edges and header on scroll ---------- */
-  const flows = [...document.querySelectorAll('.flow')].map((sec) => ({
-    sec,
-    path: sec.querySelector('.wave path'),
-    amp: 0,
-  }));
-  const sections = [...document.querySelectorAll('main section[id]')];
-  const navLinks = [...document.querySelectorAll('.nav a')];
-  const W = 1440, H = 140, POINTS = 12;
+  /* ---------- Magnetic buttons ---------- */
+  if (finePointer) {
+    document.querySelectorAll('.magnetic').forEach((el) => {
+      el.addEventListener('pointermove', (e) => {
+        const r = el.getBoundingClientRect();
+        const x = (e.clientX - r.left - r.width / 2) * 0.25;
+        const y = (e.clientY - r.top - r.height / 2) * 0.35;
+        el.style.transition = 'transform 200ms ease-out';
+        el.style.transform = `translate(${x}px, ${y}px)`;
+      });
+      el.addEventListener('pointerleave', () => {
+        el.style.transition = 'transform 700ms cubic-bezier(0.22, 1, 0.36, 1)';
+        el.style.transform = '';
+      });
+    });
+  }
 
+  /* ---------- Services: image follows the cursor ---------- */
+  const float = document.querySelector('.service-float');
+  const floatImg = float && float.querySelector('img');
+  if (float && finePointer) {
+    const fp = { x: 0, y: 0, tx: 0, ty: 0 };
+    let fRaf = null;
+    const fFrame = () => {
+      fp.x = lerp(fp.x, fp.tx, 0.14);
+      fp.y = lerp(fp.y, fp.ty, 0.14);
+      float.style.left = `${fp.x}px`;
+      float.style.top = `${fp.y}px`;
+      fRaf = float.classList.contains('is-on') || Math.abs(fp.x - fp.tx) > 0.5 ? requestAnimationFrame(fFrame) : null;
+    };
+    document.querySelectorAll('.service').forEach((row) => {
+      row.addEventListener('pointerenter', (e) => {
+        floatImg.src = row.dataset.img;
+        if (!float.classList.contains('is-on')) { fp.x = e.clientX; fp.y = e.clientY; }
+        float.classList.add('is-on');
+        if (!fRaf) fRaf = requestAnimationFrame(fFrame);
+      });
+      row.addEventListener('pointermove', (e) => { fp.tx = e.clientX + 180; fp.ty = e.clientY; });
+      row.addEventListener('pointerleave', () => float.classList.remove('is-on'));
+    });
+  }
+
+  /* ---------- Scroll: header, project scale, marquee speed ---------- */
+  const leads = [...document.querySelectorAll('[data-scale]')];
+  const marqueeAnims = [...document.querySelectorAll('.marquee-track, .gallery-track')]
+    .map((el) => el.getAnimations()[0]).filter(Boolean);
   let lastY = window.scrollY;
   let velocity = 0;
-  let scrollRaf = null;
+  let sRaf = null;
 
-  const wavePath = (amp, phase) => {
-    const pts = [];
-    for (let i = 0; i <= POINTS; i++) {
-      const x = (i / POINTS) * W;
-      const u = i / POINTS;
-      const bulge = Math.sin(Math.PI * u);
-      const ripple = 0.55 * Math.sin(u * Math.PI * 2.2 + phase) + 0.25 * Math.sin(u * Math.PI * 4.1 - phase * 1.3);
-      const y = H - amp * clamp(bulge * (0.7 + ripple * 0.5), 0, 1.2);
-      pts.push([x, y]);
-    }
-    let d = `M0 ${H} L${pts[0][0]} ${pts[0][1].toFixed(1)}`;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p0 = pts[Math.max(0, i - 1)], p1 = pts[i], p2 = pts[i + 1], p3 = pts[Math.min(pts.length - 1, i + 2)];
-      const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
-      const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
-      d += ` C${c1x.toFixed(1)} ${c1y.toFixed(1)} ${c2x.toFixed(1)} ${c2y.toFixed(1)} ${p2[0].toFixed(1)} ${p2[1].toFixed(1)}`;
-    }
-    return `${d} L${W} ${H} Z`;
-  };
-
-  const scrollFrame = () => {
+  const sFrame = () => {
     const y = window.scrollY;
     const vh = window.innerHeight;
     velocity = lerp(velocity, y - lastY, 0.2);
     lastY = y;
 
     header.classList.toggle('is-scrolled', y > 40);
-    header.classList.toggle('is-hidden', y > vh * 0.9 && velocity > 2);
+    header.classList.toggle('is-hidden', y > vh * 0.9 && velocity > 2 && !body.classList.contains('menu-open'));
 
-    let busy = Math.abs(velocity) > 0.2;
-
-    flows.forEach((f) => {
-      const top = f.sec.getBoundingClientRect().top;
-      const entering = clamp((top - vh * 0.15) / (vh * 0.85), 0, 1);
-      const target = top > vh + 150 || top < -150 ? 0 : entering * 110 + Math.min(Math.abs(velocity) * 1.6, 30) * (top > 0 ? 1 : 0);
-      f.amp = lerp(f.amp, clamp(target, 0, 125), 0.12);
-      if (Math.abs(f.amp - target) > 0.3) busy = true;
-      f.path.setAttribute('d', wavePath(f.amp, y * 0.004));
+    leads.forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.top > vh || r.bottom < 0) return;
+      const p = clamp((vh - r.top) / (vh * 0.85), 0, 1);
+      const e = 1 - Math.pow(1 - p, 3);
+      el.style.transform = `scale(${(0.86 + 0.14 * e).toFixed(4)})`;
     });
 
-    let current = null;
-    sections.forEach((s) => { if (s.getBoundingClientRect().top < vh * 0.45) current = s.id; });
-    navLinks.forEach((a) => a.classList.toggle('is-active', a.getAttribute('href') === `#${current}`));
+    const rate = 1 + Math.min(Math.abs(velocity) * 0.12, 4);
+    marqueeAnims.forEach((a) => { a.playbackRate = lerp(a.playbackRate, rate, 0.2); });
 
-    scrollRaf = busy ? requestAnimationFrame(scrollFrame) : null;
+    const busy = Math.abs(velocity) > 0.1 || marqueeAnims.some((a) => Math.abs(a.playbackRate - 1) > 0.02);
+    sRaf = busy ? requestAnimationFrame(sFrame) : null;
   };
-  const wakeScroll = () => { if (!scrollRaf) scrollRaf = requestAnimationFrame(scrollFrame); };
+  const wakeScroll = () => { if (!sRaf) sRaf = requestAnimationFrame(sFrame); };
   window.addEventListener('scroll', wakeScroll, { passive: true });
   window.addEventListener('resize', wakeScroll);
   wakeScroll();
@@ -259,10 +329,10 @@
   /* ---------- Reveal on scroll ---------- */
   const io = new IntersectionObserver((entries) => {
     entries.forEach((e) => {
-      if (e.isIntersecting) {
-        e.target.classList.add('is-in');
-        io.unobserve(e.target);
-      }
+      if (!e.isIntersecting) return;
+      e.target.classList.add('is-in');
+      e.target.querySelectorAll('[data-count]').forEach(runCounter);
+      io.unobserve(e.target);
     });
   }, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' });
   document.querySelectorAll('[data-reveal],[data-rise],[data-media]').forEach((el) => io.observe(el));
@@ -275,5 +345,5 @@
       else v.pause();
     });
   }, { threshold: 0.3 });
-  document.querySelectorAll('.media video').forEach((v) => vio.observe(v));
+  document.querySelectorAll('video').forEach((v) => vio.observe(v));
 })();
